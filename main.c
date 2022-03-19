@@ -34,8 +34,8 @@ void PerlinNoise1D(int nCount, float* fSeed, int nOctaves, float* fOutput)
 
 }
 
-int nScreenWidth = 1024;
-int nScreenHeight = 768;
+const int nScreenWidth = 1024;
+const int nScreenHeight = 768;
 
 #define OUTPUT_SIZE 1024
 #define MAX_OCTAVE_COUNT 9
