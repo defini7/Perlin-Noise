@@ -7,7 +7,7 @@ LRESULT CALLBACK WindowProc(HWND, UINT, WPARAM, LPARAM);
 void EnableOpenGL(HWND hwnd, HDC*, HGLRC*);
 void DisableOpenGL(HWND, HDC, HGLRC);
 
-void PerlinNoise1D(int nCount, float* fSeed, int nOctaves, float* fOutput)
+void DoPerlinNoise1D(int nCount, float* fSeed, int nOctaves, float fBias, float* fOutput)
 {
     for (int x = 0; x < nCount; x++)
     {
@@ -26,12 +26,45 @@ void PerlinNoise1D(int nCount, float* fSeed, int nOctaves, float* fOutput)
 
             fNoise += fSample * fScale;
             fScaleAccumulator += fScale;
-            fScale /= 2.0f;
+            fScale /= fBias;
         }
 
         fOutput[x] = fNoise / fScaleAccumulator;
     }
+}
 
+void DoPerlinNoise2D(int nWidth, int nHeight, float* fSeed, int nOctaves, float fBias, float* fOutput)
+{
+    for (int x = 0; x < nWidth; x++)
+        for (int y = 0; y < nHeight; y++)
+        {
+            float fNoise = 0.0f;
+            float fScale = 1.0f;
+            float fScaleAccumulator = 0.0f;
+
+            for (int o = 0; o < nOctaves; o++)
+            {
+                int nPitch = nWidth >> o;
+
+                int nSampleX1 = (x / nPitch) * nPitch;
+                int nSampleY1 = (y / nPitch) * nPitch;
+
+                int nSampleX2 = (nSampleX1 + nPitch) % nWidth;
+                int nSampleY2 = (nSampleY1 + nPitch) % nWidth;
+
+                float fBlendX = (float)(x - nSampleX1) / (float)nPitch;
+                float fBlendY = (float)(y - nSampleY1) / (float)nPitch;
+
+                float fSampleT = (1.0f - fBlendX) * fSeed[nSampleY1 * nWidth + nSampleX1] + fBlendX * fSeed[nSampleY1 * nWidth + nSampleX2];
+                float fSampleB = (1.0f - fBlendX) * fSeed[nSampleY2 * nWidth + nSampleX1] + fBlendX * fSeed[nSampleY2 * nWidth + nSampleX2];
+
+                fNoise += (fBlendY * (fSampleB - fSampleT) + fSampleT) * fScale;
+                fScaleAccumulator += fScale;
+                fScale /= fBias;
+            }
+
+            fOutput[y * nWidth + x] = fNoise / fScaleAccumulator;
+        }
 }
 
 const int nScreenWidth = 1024;
@@ -43,7 +76,15 @@ const int nScreenHeight = 768;
 float fNoiseSeed1D[OUTPUT_SIZE];
 float fPerlinNoise1D[OUTPUT_SIZE];
 
+#define OUTPUT_WIDTH 1024
+#define OUTPUT_HEIGHT 768
+
+float fNoiseSeed2D[OUTPUT_WIDTH * OUTPUT_HEIGHT];
+float fPerlinNoise2D[OUTPUT_WIDTH * OUTPUT_HEIGHT];
+
 int nOctaveCount = 1;
+float fScalingBias = 2.0f;
+int nMode = 1;
 
 int WINAPI WinMain(HINSTANCE hInstance,
                    HINSTANCE hPrevInstance,
@@ -101,6 +142,9 @@ int WINAPI WinMain(HINSTANCE hInstance,
     for (int i = 0; i < OUTPUT_SIZE; i++)
         fNoiseSeed1D[i] = (float)rand() / (float)RAND_MAX;
 
+    for (int i = 0; i < OUTPUT_WIDTH * OUTPUT_HEIGHT; i++)
+        fNoiseSeed2D[i] = (float)rand() / (float)RAND_MAX;
+
     /* program main loop */
     while (!bQuit)
     {
@@ -130,20 +174,41 @@ int WINAPI WinMain(HINSTANCE hInstance,
             if (nOctaveCount == MAX_OCTAVE_COUNT)
                 nOctaveCount = 1;
 
-            PerlinNoise1D(OUTPUT_SIZE, fNoiseSeed1D, nOctaveCount, fPerlinNoise1D);
+            if (fScalingBias < 0.2f)
+                fScalingBias = 0.2f;
 
-            glBegin(GL_LINES);
-            for (int x = 0; x < OUTPUT_SIZE; x++)
+            if (nMode == 1)
             {
-                int y = fPerlinNoise1D[x] * (float)nScreenHeight / 2.0f + (float)nScreenHeight / 2.0f;
+                DoPerlinNoise1D(OUTPUT_SIZE, fNoiseSeed1D, nOctaveCount, fScalingBias, fPerlinNoise1D);
 
-                glColor3f(0.0f, 1.0f, 0.0f);
-                glVertex2f(x, y);
+                glBegin(GL_LINES);
+                for (int x = 0; x < OUTPUT_SIZE; x++)
+                {
+                    int y = fPerlinNoise1D[x] * (float)nScreenHeight / 2.0f + (float)nScreenHeight / 2.0f;
 
-                glColor3f(0.0f, 1.0f, 0.0f);
-                glVertex2f(x, nScreenHeight / 2);
+                    glColor3f(0.0f, 1.0f, 0.0f);
+                    glVertex2f(x, y);
+
+                    glColor3f(0.0f, 1.0f, 0.0f);
+                    glVertex2f(x, nScreenHeight / 2);
+                }
+                glEnd();
             }
-            glEnd();
+            else if (nMode == 2)
+            {
+                DoPerlinNoise2D(OUTPUT_WIDTH, OUTPUT_HEIGHT, fNoiseSeed2D, nOctaveCount, fScalingBias, fPerlinNoise2D);
+
+                glBegin(GL_POINTS);
+                for (int x = 0; x < OUTPUT_WIDTH; x++)
+                    for (int y = 0; y < OUTPUT_HEIGHT; y++)
+                    {
+                        float col = fPerlinNoise2D[y * OUTPUT_WIDTH + x];
+
+                        glColor3f(col + 0.15f, col + 0.15f, col + 0.15f);
+                        glVertex2f(x, y);
+                    }
+                glEnd();
+            }
 
             glPopMatrix();
 
@@ -183,6 +248,50 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
                 case VK_SPACE:
                     nOctaveCount++;
+                    break;
+
+                case L'Z':
+                    if (nMode == 1)
+                    {
+                        for (int i = 0; i < OUTPUT_SIZE; i++)
+                            fNoiseSeed1D[i] = (float)rand() / (float)RAND_MAX;
+                    }
+                    else if (nMode == 2)
+                    {
+                        for (int i = 0; i < OUTPUT_WIDTH * OUTPUT_HEIGHT; i++)
+                            fNoiseSeed2D[i] = (float)rand() / (float)RAND_MAX;
+                    }
+
+                    break;
+
+                case L'Q':
+                    fScalingBias += 0.2f;
+                    break;
+
+                case L'A':
+                    fScalingBias -= 0.2f;
+                    break;
+
+                case L'1':
+                    nMode = 1;
+                    nOctaveCount = 1;
+
+                    printf("1");
+
+                    for (int i = 0; i < OUTPUT_SIZE; i++)
+                        fNoiseSeed1D[i] = (float)rand() / (float)RAND_MAX;
+
+                    break;
+
+                case L'2':
+                    nMode = 2;
+                    nOctaveCount = 1;
+
+                    printf("2");
+
+                    for (int i = 0; i < OUTPUT_WIDTH * OUTPUT_HEIGHT; i++)
+                        fNoiseSeed2D[i] = (float)rand() / (float)RAND_MAX;
+
                     break;
             }
         }
@@ -232,4 +341,3 @@ void DisableOpenGL (HWND hwnd, HDC hDC, HGLRC hRC)
     wglDeleteContext(hRC);
     ReleaseDC(hwnd, hDC);
 }
-
