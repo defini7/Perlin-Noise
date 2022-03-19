@@ -38,11 +38,12 @@ int nScreenWidth = 1024;
 int nScreenHeight = 768;
 
 #define OUTPUT_SIZE 1024
+#define MAX_OCTAVE_COUNT 9
 
 float fNoiseSeed1D[OUTPUT_SIZE];
 float fPerlinNoise1D[OUTPUT_SIZE];
 
-int nOctaveCount = 0;
+int nOctaveCount = 1;
 
 int WINAPI WinMain(HINSTANCE hInstance,
                    HINSTANCE hPrevInstance,
@@ -126,7 +127,7 @@ int WINAPI WinMain(HINSTANCE hInstance,
 
             glPushMatrix();
 
-            if (nOctaveCount == 9)
+            if (nOctaveCount == MAX_OCTAVE_COUNT)
                 nOctaveCount = 1;
 
             PerlinNoise1D(OUTPUT_SIZE, fNoiseSeed1D, nOctaveCount, fPerlinNoise1D);
