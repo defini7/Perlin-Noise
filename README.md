@@ -6,4 +6,4 @@ Perlin Noise OpenGL
 ![alt text](1d.PNG)
 
 ## 2D
-![alt text[(2d.PNG)
+![alt text](2d.PNG)
